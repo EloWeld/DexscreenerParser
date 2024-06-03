@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка фото</title>
+    <!-- Подключаем Bootstrap CSS -->
+    <!-- Подключаем Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .center {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .center-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .status-img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+
+        .purple-btn {
+            background-color: purple;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container center">
+        <h1 class="mb-4 text-center">Загрузи фото своей половинки и по нему мы найдем совпадения на сайте знакомств</h1>
+
+        <div class="row">
+            <div class="text-center mr-5">
+                <img src="https://мамба-детектив.рф/work/img/image%205.svg" alt="Хорошее фото" class="status-img mb-3">
+                <p style="max-width: 200px;">Хорошее фото.<br/>Видно лицо 😍</p>
+                
+            </div>
+            <div class="text-center  ml-5">
+                <img src="https://мамба-детектив.рф/work/img/image%204.svg" alt="Плохое фото" class="status-img mb-3">
+                <p style="max-width: 200px;">Плохое фото. Лицо скрыто за очками и в пол оборота. 😐</p>
+            </div>
+        </div>
+
+        <div id="photoStatus" class="mt-2 text-center"></div>
+
+        <form id="uploadForm" enctype="multipart/form-data" class="mt-2">
+            <div class="form-group">
+                <input type="file" class="form-control-file mb-3 d-none" id="photoInput" accept="image/*">
+                <label for="photoInput" class="btn purple-btn btn-block px-5">Загрузить фото</label>
+            </div>
+        </form>
+    </div>
+
+
+    <!-- Подключаем jQuery (для работы AJAX) и Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#uploadForm').submit(function (e) {
+                e.preventDefault(); // Предотвращаем стандартное поведение формы
+                var formData = new FormData(this);
+                $.ajax({
+                    url: 'upload.php', // Укажите URL для обработки загруженного файла
+                    type: 'POST',
+                    data: formData,
+                    dataType: 'json',
+                    contentType: false,
+                    processData: false,
+                    success: function (response) {
+                        if (response.success) {
+                            $('#photoStatus').html(`<p class="text-success">Хорошее фото. Видно лицо</p><p class="text-center">Загружен файл: ${response.filename}</p>`);
+                        } else {
+                            $('#photoStatus').html(`<p class="text-danger">Плохое фото. Лицо скрыто за очками и в пол оборота.</p>`);
+                        }
+                    },
+                    error: function () {
+                        $('#photoStatus').html(`<p class="text-danger">Произошла ошибка при загрузке фото.</p>`);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
