@@ -42,6 +42,11 @@ def create_driver():
         "geolocation": True,
     })
 
+    # Добавляем опции для безголового режима
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920x1080")
+
     driver = Chrome(options=options)
 
     driver.execute_script(

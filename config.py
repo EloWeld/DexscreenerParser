@@ -10,10 +10,10 @@ DICT = {
 }
 
 FILTERS = {
-    "minLiq": 2000,
+    "minLiq": 5000,
     "min24HChg": 1,
     "minAge": 0,
-    "maxAge": 2,
+    "maxAge": 3,
     "chains": ["ethereum"], #"solana", "bsc",  "optimism", "arbitrum", "aptos", "polygon", "avalanche"
     "rankBy": "pairAge",
     "order": "asc",
@@ -24,7 +24,7 @@ FILTERS = {
 }
 
 TRADE_SETTINGS = {
-    "buy_pair_age_range": [1, 15],
+    "buy_pair_age_range": [1, 920],
     "sell_age": 4,
     "my_max_tokens_buys": 77,
     "my_max_tokens_sells": 77,
