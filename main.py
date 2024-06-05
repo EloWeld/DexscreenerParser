@@ -57,7 +57,11 @@ def main():
             continue
 
         # Wait for table is visible
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".ds-dex-table.ds-dex-table-new")))
+        try:
+            WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".ds-dex-table.ds-dex-table-new")))
+        except Exception as e:
+            loguru.logger.error("Maybe we are banned")
+            continue
 
         # Add filters
         driver.implicitly_wait(30)
