@@ -1,5 +1,6 @@
 import json
 import time
+import loguru
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
@@ -7,7 +8,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 from config import *
 from utils import *
-from web3_connector import getBurnedBalance, getBurnedPercentage, getContract, getPairBalance, getTotalSupply
+from web3_connector import TokenWeb3Stats
 
 
 class TokenValidator:
@@ -48,10 +49,18 @@ class TokenValidator:
                 logger.error("No issues list found")
                 return []
             for issue in issues_list:
-                label = issue.find_element(By.XPATH, './div[1]')
-                value = issue.find_element(By.XPATH, './div[last()]')
-                issues[label.text] = value.text
-
+                try:
+                    ll = issue.find_element(By.XPATH, './div[1]').text
+                except Exception as e:
+                    loguru.logger.error(f"Error, cant identift label of issue, alllist: {issue.text}")
+                    ll = "?"
+                try:
+                    vv = issue.find_element(By.XPATH, './div[last()]').text
+                except Exception as e:
+                    loguru.logger.error(f"Error, cant identift label of issue, alllist: {issue.text}")
+                    vv = "?"
+                issues[ll] = vv
+            issues = {x: y for x, y in issues.items() if x not in ["Creator address", "Owner address", ""]}
             return issues
         except Exception as e:
             logger.error(str(e)+"\n"+traceback.format_exc())
@@ -82,7 +91,7 @@ class TokenValidator:
             signatures = []
             link_el.click()
             self.driver.switch_to.window(self.driver.window_handles[2])
-            
+
             self.driver.implicitly_wait(20)
 
             scores_span = self.driver.find_element(By.XPATH, '//h2[text()[contains(.,"Score:")]]/span')
@@ -91,12 +100,11 @@ class TokenValidator:
             signatures_els: list[WebElement] = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'Home_alertSection')]/ul/li")
             signatures = [x.text for x in signatures_els]
             self.driver.implicitly_wait(2)
-            
-            
+
             if "tokensniffer" in self.driver.current_url:
                 self.driver.close()
                 self.driver.switch_to.window(self.driver.window_handles[1])
-            
+
             return dict(
                 scores=scores,
                 signatures=signatures
@@ -113,7 +121,7 @@ class TokenValidator:
                 scores=0,
                 signatures=[]
             )
-        
+
     def getTokenAddress(self):
         try:
             trade_uniswap_title_el = self.driver.find_element(By.XPATH, '//button[text()="Trade on Uniswap"]/parent::div/a')
@@ -123,8 +131,7 @@ class TokenValidator:
         except Exception as e:
             logger.error(str(e)+"\n"+traceback.format_exc())
             return None
-        
-        
+
     def getPairAddress(self):
         try:
             pair_title_el = self.driver.find_element(By.XPATH, '//span[text()="Pair"]')
@@ -135,6 +142,103 @@ class TokenValidator:
             logger.error(str(e)+"\n"+traceback.format_exc())
             return None
 
+
+class ScamValidator:
+    def __init__(self, driver: WebDriver, filter_file='filters.json', message_file='filter_messages.json'):
+        self.driver = driver
+        self.load_filters(filter_file)
+        self.load_messages(message_file)
+        self.token_address = None
+        self.pair_address = None
+
+    def load_filters(self, filter_file):
+        with open(filter_file) as f:
+            self.filters = json.load(f)
+
+    def load_messages(self, message_file):
+        with open(message_file) as f:
+            self.messages = json.load(f)
+
+    def check_is_scam(self, token):
+        self.token = token
+        self.driver.implicitly_wait(2)
+        validator = TokenValidator(self.driver, self.token)
+        open_result = validator.openToken()
+        if open_result == "CANT_OPEN_TOKEN":
+            return True, self.messages["CANT_OPEN_TOKEN"]
+
+        self.token_address = validator.getTokenAddress()
+        self.pair_address = validator.getPairAddress()
+
+        validator_status = {}
+        validator_status['token_address'] = self.token_address
+        validator_status['pair_address'] = self.pair_address
+        validator_status['locked_liq'] = validator.checkLockedLiquidity()
+        validator_status['paid_plan_links'] = validator.getPaidViewLinks()
+
+        if self.filters['paid_plan_links'] == 1:
+            if validator_status['paid_plan_links'] == []:
+                return True, self.messages["NO_PAID_LINKS"]
+
+        if self.filters['locked_liq'] == 1:
+            if not validator_status['locked_liq']:
+                return True, self.messages["UNLOCKED_LIQUIDITY"]
+
+        validator_status['issues'] = validator.checkIssues()
+
+        if validator_status['issues'] == []:
+            return True, "Token's URL broken, not on Ether blockchain"
+        if self.filters['open_source'] == 1 and validator_status['issues'].get('Open source') == "No":
+            return True, self.messages["NOT_OPEN_SOURCE"]
+        if self.filters['honeypot'] == 1 and validator_status['issues'].get('Honeypot', 'Yes') == "Yes":
+            return True, self.messages["HONEYPOT"]
+
+        selltax: str = validator_status['issues'].get('Sell tax', '0').replace('%', '')
+        buytax: str = validator_status['issues'].get('Buy tax', '0').replace('%', '')
+        if (selltax.isdigit() and int(selltax) > self.filters['max_sell_tax']):
+            return True, self.messages["S_HIGH_TAX"].format(self.filters['max_sell_tax'], selltax)
+        if (buytax.isdigit() and int(buytax) > self.filters['max_buy_tax']):
+            return True, self.messages["B_HIGH_TAX"].format(self.filters['max_buy_tax'], buytax)
+
+        if self.filters["owner_can_change_balance"] == 1 and validator_status['issues'].get('Owner can change balance') == "Yes":
+            return True, self.messages["CHANGE_BALANCE"]
+        if self.filters["ownership_renounced"] == 1 and validator_status['issues'].get('Ownership renounced') == "No":
+            return True, self.messages["NO_OWNERSHIP_RENOUNCED"]
+
+        if validator_status['issues'].get('Holder count', '0').replace(' ', '').isdigit() and int(validator_status['issues'].get('Holder count', '0').replace(' ', '')) < self.filters['min_holder_count']:
+            return True, self.messages["LOW_HOLDERS"].format(self.filters['min_holder_count'], validator_status['issues'].get('Holder count', '0'))
+
+        if self.filters["sniffer"] == 1:
+
+            link_el, link_href = validator.getSnifferLink()
+            validator_status['sniffer_link'] = link_href
+            validator_status['sniffer_data'] = validator.getSnifferScores(link_el) if link_el else None
+
+            if not validator_status['sniffer_data']:
+                return True, self.messages["NO_SNIFFER_SCORES"]
+
+            if validator_status['sniffer_data']['scores'] < self.filters['min_sniffer_score'] / 100:
+                return True, self.messages["LOW_SNIFFER_SCORE"].format(self.filters['min_sniffer_score'] / 100, validator_status['sniffer_data']['scores'], )
+            if self.filters['sniffer_signatures'] == 1 and validator_status['sniffer_data']['signatures']:
+                return True, self.messages["SNIFFER_SIGNATURES"]
+
+        if self.filters['web3'] == 1:
+            token_analyzer = TokenWeb3Stats()
+            token_analyzer.initToken(self.token_address, self.pair_address)
+            validator_status.update(token_analyzer.getAllInfo())
+            validator_status.update(self.token)
+
+            if validator_status['pair_percent'] < self.filters['min_pool_liq_percent']:
+                return True, self.messages["LOW_PAIR_PERCENT"].format(self.filters['min_pool_liq_percent'], validator_status['pair_percent'])
+
+            if validator_status['burned_percent'] < self.filters['min_burned_percent']:
+                if validator_status['burned_percent'] > 0:
+                    return True, self.messages["LOW_BURNED_PERCENT"].format(self.filters['min_burned_percent'], validator_status['burned_percent'])
+                logger.error("Burned balance is zero, so idk what to do")
+
+        return False, validator_status
+
+
 def check_is_scam(driver: WebDriver, token):
     driver.implicitly_wait(2)
 
@@ -142,23 +246,23 @@ def check_is_scam(driver: WebDriver, token):
     open_result = validator.openToken()
     if open_result == "CANT_OPEN_TOKEN":
         return True, "Cant open token"
-    
+
     token_address = validator.getTokenAddress()
     pair_address = validator.getPairAddress()
-    
+
     validator_status = {}
     validator_status['token_address'] = token_address
     validator_status['pair_address'] = token_address
     validator_status['locked_liq'] = validator.checkLockedLiquidity()
     validator_status['paid_plan_links'] = validator.getPaidViewLinks()
-    
+
     if not validator_status['locked_liq']:
         return True, "Unlocked liquidity"
-    
+
     validator_status['issues'] = validator.checkIssues()
-    
+
     if validator_status['issues'] == []:
-        return False, "Tokens' url broken, not ether blockchain"
+        return True, "Tokens' url broken, not ether blockchain"
     if validator_status['issues']['Open source'] == "Noe":
         return True, f"Not open source"
     if validator_status['issues'].get('Honeypot', 'Yes') == "Yes":
@@ -169,46 +273,38 @@ def check_is_scam(driver: WebDriver, token):
         return True, f"Sell taxes or buy taxes too high or unknown"
     if validator_status['issues']['Owner can change balance'] == "Yes":
         return True, "Owner can change balance"
-    if validator_status['issues']['Holder count'].isdigit() and  int(validator_status['issues']['Holder count']) < 3:
+    if validator_status['issues']['Holder count'].isdigit() and int(validator_status['issues']['Holder count']) < 3:
         return True, "Less than 3 holders"
     if validator_status['issues']['Ownership renounced'] == "No":
         return True, "No Ownership renounced"
     # if validator_status['issues']['Trading cooldown'] == "Yes":
     #     return True, "Trading cooldown"
-    
+
     link_el, link_href = validator.getSnifferLink()
     validator_status['sniffer_link'] = link_href
     validator_status['sniffer_scores'] = validator.getSnifferScores(link_el) if link_el else None
-    
-    
+
     if not validator_status['sniffer_scores']:
         return True, "Not available sniffer scores"
     if validator_status['sniffer_scores']['scores'] < 0.2:
         return True, f"Sniffer scores lesser then 20%, it's {validator_status['sniffer_scores']['scores']}"
     if validator_status['sniffer_scores']['signatures']:
         return True, f"Sniffer signatures: {validator_status['sniffer_scores']['signatures']}"
-    
-    
-    
-    contract = getContract(token_address)
-    validator_status['total_supply'] = getTotalSupply(token_address, contract)
-    
-    validator_status['pair_balance'] = getPairBalance(token_address, pair_address, contract)
-    validator_status['pair_percent'] = (validator_status['pair_balance'] / validator_status['total_supply']) * 100
-    
-    validator_status['burned_balance'] = getBurnedBalance(pair_address, None)
-    validator_status['burned_percent'] = getBurnedPercentage(pair_address)
+
+    token_analyzer = TokenWeb3Stats()
+    token_analyzer.initToken(token_address, pair_address)
+    validator_status.update(token_analyzer.getAllInfo())
     validator_status.update(token)
-    
-    if validator_status['pair_percent'] < 95:
-        return True, f"Less then 95% of supply in pool, now: {validator_status['pair_percent']}"
+
+    if validator_status['pair_percent'] < 40:
+        return True, f"Less then 3% of supply in pool, now: {validator_status['pair_percent']:.2f}%"
     if validator_status['burned_percent'] < 90:
         if validator_status['burned_percent'] > 0:
-            return True, f"Less then 90% of pool burned, now: {validator_status['burned_percent']}"
+            return True, f"Less then 90% of pool burned, now: {validator_status['burned_percent']:.2f}"
         logger.error("Burned balance is zero, so idk what to do")
-    
-    return False, str(json.dumps(validator_status, indent=4, ensure_ascii=False, default=str))
-    
+
+    return False, validator_status
+
 
 def go_filter(driver):
     base_url = "https://dexscreener.com/new-pairs?"

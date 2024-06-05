@@ -5,7 +5,8 @@ import traceback
 
 def convert_to_num(s):
     # Remove the dollar sign and 'K'
-    s = s.replace('$', '').replace('%', '').replace('K', '000').replace('M', '000000').replace('B', '000000000').replace('T', '000000000000').replace('Q', '000000000000').replace('N/A', '0').replace('<', '').replace('>', '').replace('-', '0')
+    s = s.replace('$', '').replace('%', '').replace('K', '000').replace('M', '000000').replace('B', '000000000').replace(
+        'T', '000000000000').replace('Q', '000000000000').replace('N/A', '0').replace('<', '').replace('>', '').replace('-', '0')
 
     # Convert the string to a float
     if ',' in s:
@@ -15,6 +16,7 @@ def convert_to_num(s):
     number = float(s)
 
     return number
+
 
 def parse_time_string(time_str):
     # Разделение строки по пробелам
@@ -43,9 +45,10 @@ def parse_time_string(time_str):
 
     # Создание объекта datetime с текущей датой и временем, и добавление временного сдвига
     current_datetime = datetime.datetime.now()
-    result_datetime = current_datetime - time_delta 
+    result_datetime = current_datetime - time_delta
 
     return result_datetime
+
 
 def row_to_dict(row):
     try:
@@ -81,3 +84,46 @@ def row_to_dict(row):
         # print(f"Error row data {row_data_list}, {e}, {traceback.format_exc()}")
         row_data_dict = None
     return row_data_dict
+
+
+def prettify_token_dict(data: dict):
+    return {
+        "blink_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "base": {
+            "token_address": data["token_address"],
+            "pair_address": data["pair_address"],
+            "shrt": f"{data['baseToken']}/{data['quoteToken']}",
+            "lng": data['tokenName'],
+            "link": f"https://dexscreener.com/ethereum/{data['pair_address']}",
+            "price": data['price'],
+            "created_at": data["createdAt"],
+        },
+        "trading_stats": {
+            "buys": data["buys"],
+            "sells": data["sells"],
+            "volume": data["volume"],
+            "makers": data["makers"],
+            "5MChg": data["5MChg"],
+            "1HChg": data["1HChg"],
+            "6hChg": data["6hChg"],
+            "24hChg": data["24hChg"],
+            "liquidity": data["liquidity"],
+            "fdv": data["fdv"],
+        },
+        "tokenomic": {
+            "total_supply": data["total_supply"],
+            "added_liquidity": data["pair_balance"],
+            "added_liquidity_ratio": data["pair_percent"],
+            "burned_balance": data["burned_balance"],
+            "burned_ratio": data["burned_percent"],
+        },
+        "liquidity": {
+            "is_locked": data["locked_liq"],
+        },
+        "issues": data["issues"],
+        "token_sniffer": {
+            "link": data["sniffer_link"],
+            "sniffer_data": data["sniffer_data"]
+        },
+        "paid_plan_links": data['paid_plan_links'],
+    }

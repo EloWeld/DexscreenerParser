@@ -1,0 +1,21 @@
+{
+    "locked_liq": 1,
+    "paid_plan_links": 1,
+    "————— ISSUES": "---------",
+    "open_source": 1,
+    "honeypot": 1,
+    "owner_can_change_balance": 1,
+    "ownership_renounced": 1,
+    "————— SNIFFER": "—————",
+    "sniffer": 1,
+    "sniffer_signatures": 1,
+    "min_sniffer_score": 20,
+    "————— TAXES & HOLDERS": "—————",
+    "max_sell_tax": 4,
+    "max_buy_tax": 4,
+    "min_holder_count": 3,
+    "————— WEB3": "—————",
+    "web3": 1,
+    "min_pool_liq_percent": 73,
+    "min_burned_percent": 90
+}

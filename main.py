@@ -1,4 +1,5 @@
 
+import pygame
 import setuptools  # Не забываем что это нужно и не просто так
 import json
 import time
@@ -18,6 +19,12 @@ from trade import trade
 from utils import *
 
 driver: WebDriver = None
+
+
+def play_sound_effect(sound_file):
+    pygame.mixer.init()
+    sound = pygame.mixer.Sound(sound_file)
+    sound.play()
 
 
 def open_dexscreener():
@@ -41,11 +48,11 @@ def main():
 
     while True:
         try:
-            driver = create_driver()
+            driver = create_driver(headless=True, profile_replacer=True)
 
             open_dexscreener()
         except Exception as e:
-            loguru.logger.error("Cant open chrome, wait...")
+            loguru.logger.error(f"Cant open chrome, wait... {e}")
             time.sleep(10)
             continue
 
@@ -72,16 +79,28 @@ def main():
         tokens = {key: value for key, value in unfiltered_tokens.items() if value['badge'] == 'V2'}
         print(f"Filtered tokens, now {len(tokens)}/{len(unfiltered_tokens)}")
 
+        scam_validator = ScamValidator(driver)
+
         for i, (token_name, token_data) in enumerate(tokens.items()):
-            t_scam_check_result, t_scam_check_msg = check_is_scam(driver, token_data)
+            t_scam_check_result, t_scam_check_msg = scam_validator.check_is_scam(token_data)
             go_filter(driver)
             if t_scam_check_result:
                 loguru.logger.error(f"{token_name} is scam, cause of: {t_scam_check_msg}")
             else:
-                loguru.logger.success(f"{token_name} is not scam, data: {t_scam_check_msg}")
-                with open("good_tokens.txt", 'a', encoding='utf-8') as f:
-                    f.write(t_scam_check_msg+"\n")
-            loguru.logger.info(f"Scanned {i}/{len(tokens)}")
+                with open("good_tokens.json", 'r', encoding='utf-8') as f:
+                    good_tokens = json.loads(f.read())
+
+                if t_scam_check_msg['token_address'] not in good_tokens:
+                    loguru.logger.success(f"{token_name} is not scam, data: {t_scam_check_msg}")
+                    play_sound_effect("notif.mp3")
+                else:
+                    loguru.logger.info(f"{token_name} is not scam but already in good tokens")
+
+                good_tokens[t_scam_check_msg['token_address']] = prettify_token_dict(t_scam_check_msg)
+
+                with open("good_tokens.json", 'w', encoding='utf-8') as f:
+                    f.write(json.dumps(good_tokens, ensure_ascii=False, default=str, indent=4))
+            loguru.logger.info(f"Scanned {i+1}/{len(tokens)}")
 
         # trade(driver, rows)
 

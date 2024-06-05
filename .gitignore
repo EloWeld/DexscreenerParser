@@ -161,3 +161,5 @@ cython_debug/
 /chrome_profile
 /chrome_profile copy
 .DS_Store
+good_tokens.json
+good_tokens.txt

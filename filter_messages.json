@@ -1,0 +1,17 @@
+{
+    "CANT_OPEN_TOKEN": "Can't open token",
+    "UNLOCKED_LIQUIDITY": "Unlocked liquidity",
+    "NOT_OPEN_SOURCE": "Not open source",
+    "HONEYPOT": "Honeypot detected",
+    "S_HIGH_TAX": "Sell taxes higher then {} or unknown, now {}",
+    "B_HIGH_TAX": "Buy taxes higher then {} or unknown, now {}",
+    "CHANGE_BALANCE": "Owner can change balance",
+    "LOW_HOLDERS": "Less than {} holders, now {}",
+    "NO_OWNERSHIP_RENOUNCED": "No ownership renounced",
+    "NO_SNIFFER_SCORES": "Not available sniffer scores",
+    "LOW_SNIFFER_SCORE": "Sniffer scores less than {}%, now {}",
+    "SNIFFER_SIGNATURES": "Sniffer signatures detected",
+    "LOW_PAIR_PERCENT": "Less than {}% of supply in pool, now {}",
+    "LOW_BURNED_PERCENT": "Less than {}% of pool burnedm now {}",
+    "NO_PAID_LINKS": "No paid plan links in header"
+}

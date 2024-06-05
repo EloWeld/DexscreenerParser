@@ -1,127 +1,142 @@
+import json
 from web3 import Web3
+from web3.contract.contract import Contract
+from web3.middleware import construct_sign_and_send_raw_middleware
+from web3.middleware import geth_poa_middleware
+from web3.middleware.cache import construct_simple_cache_middleware
 
 # Setup
 alchemy_url = "https://eth-mainnet.g.alchemy.com/v2/lK2v_qBdtAzE5BFKZrquknGMWfD7bwbP"
-w3 = Web3(Web3.HTTPProvider(alchemy_url))
+web3 = Web3(Web3.HTTPProvider(alchemy_url))
 
-# ABI для стандарта ERC-20
-erc20_abi = [
-    {
-        "constant": True,
-        "inputs": [{"name": "_owner", "type": "address"}],
-        "name": "balanceOf",
-        "outputs": [{"name": "balance", "type": "uint256"}],
-        "payable": False,
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "constant": True,
-        "inputs": [],
-        "name": "totalSupply",
-        "outputs": [
+
+class TokenWeb3Stats:
+    def __init__(self):
+        self.erc20_abi = [
             {
-                "name": "",
-                "type": "uint256"
+                "anonymous": False,
+                "inputs": [
+                    {"indexed": True, "internalType": "address", "name": "from", "type": "address"},
+                    {"indexed": True, "internalType": "address", "name": "to", "type": "address"},
+                    {"indexed": False, "internalType": "uint256", "name": "value", "type": "uint256"}
+                ],
+                "name": "Transfer",
+                "type": "event"
+            },
+            {
+                "constant": True,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "payable": False,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": True,
+                "inputs": [],
+                "name": "totalSupply",
+                "outputs": [{"name": "", "type": "uint256"}],
+                "payable": False,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": True,
+                "inputs": [],
+                "name": "decimals",
+                "outputs": [{"name": "", "type": "uint8"}],
+                "payable": False,
+                "stateMutability": "view",
+                "type": "function"
             }
-        ],
-        "payable": False,
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "constant": True,
-        "inputs": [],
-        "name": "decimals",
-        "outputs": [{"name": "", "type": "uint8"}],
-        "payable": False,
-        "stateMutability": "view",
-        "type": "function"
-    }
-]
+        ]
 
-# Проверка подключения
-if w3.is_connected():
-    print("Connected to Ethereum node")
-else:
-    print("Failed to connect to Ethereum node")
-    
+    def initToken(self, token_address, pair_address):
+        self.token_address = token_address,
+        self.pair_address = pair_address
 
-def getContract(token_address):
-    return w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=erc20_abi)
+        self.pairAddressCSM = web3.to_checksum_address(self.pair_address)
 
-def getDecimals(token_contract):
-    return token_contract.functions.decimals().call()
+        self.tokenContract = self.getContract(token_address)
+        self.pairContract = self.getContract(pair_address)
 
-def getTotalSupply(token_address, token_contract=None):
-    if token_contract is None:
-        token_contract = getContract(token_address)
-    
-    decimals = getDecimals(token_contract)
-        
-    # Вызов функции totalSupply
-    total_supply = token_contract.functions.totalSupply().call()
+        self.tokenDecimals = self.getDecimals(self.tokenContract)
+        self.pairDecimals = self.getDecimals(self.pairContract)
 
-    # Преобразование total supply в читаемый формат с учетом десятичных знаков
-    total_supply_readable = total_supply / (10 ** decimals)
+        self.token_supply = self.getSupply(self.tokenContract, self.tokenDecimals)
+        self.pair_supply = self.getSupply(self.pairContract, self.pairDecimals)
 
-    return total_supply_readable
+    def getContract(self, token_address):
+        return web3.eth.contract(address=web3.to_checksum_address(token_address), abi=self.erc20_abi)
 
-def getTotalSupply2(token_address, token_contract=None):
-    if token_contract is None:
-        token_contract = getContract(token_address)
-    
-    # Вызов функции totalSupply
-    total_supply = token_contract.functions.totalSupply().call()
-    decimals = getDecimals(token_contract)
-    
-    return total_supply, decimals
+    def getDecimals(self, token_contract: Contract):
+        return token_contract.functions.decimals().call()
 
-def getPairBalance(token_address, pair_address, token_contract=None):
-    if token_contract is None:
-        # Создание контрактного объекта токена
-        token_contract = getContract(token_address)
+    def getSupply(self, contract, decimals):
+        supply = contract.functions.totalSupply().call()
+        return supply / (10 ** decimals)
 
-    decimals = getDecimals(token_contract)
+    def getPairBalance(self):
+        balance_in_pool = self.tokenContract.functions.balanceOf(self.pairAddressCSM).call()
+        return balance_in_pool / (10 ** self.tokenDecimals)
 
-    # Получение баланса токенов в пуле
-    balance_in_pool = token_contract.functions.balanceOf(Web3.to_checksum_address(pair_address)).call()
-    balance_in_pool_readable = balance_in_pool / (10 ** decimals)
+    def getBurnedBalance(self):
+        burn_address = web3.to_checksum_address("0x000000000000000000000000000000000000dEaD")
+        burned_tokens = self.pairContract.functions.balanceOf(burn_address).call()
+        self.burned_balance = burned_tokens / (10 ** self.pairDecimals)
+        return self.burned_balance
 
-    return balance_in_pool_readable
-    
+    def getBurnedPercentage(self):
+        return (self.burned_balance / self.pair_supply) * 100 if self.pair_supply > 0 else 0
 
-def getBurnedBalance(token_address, token_contract=None):
-    if token_contract is None:
-        # Создание контрактного объекта токена
-        token_contract = getContract(token_address)
-        
-    # Получение общего количества сожженных токенов
-    burn_address = Web3.to_checksum_address("0x000000000000000000000000000000000000dEaD")
-    burned_tokens = token_contract.functions.balanceOf(burn_address).call()
-    decimals = getDecimals(token_contract)
-    burned_tokens_readable = burned_tokens / (10 ** decimals)
+    def getAddedLiquidity(self) -> float:
+        # Получаем все блоки в диапазоне
+        # Сначала собираем все события Transfer с нужным фильтром
+        transfer_events = self.tokenContract.events.Transfer().create_filter(
+            fromBlock=0, toBlock='latest', argument_filters={'from': self.token_address}
+        ).get_all_entries()
 
-    return burned_tokens_readable
+        # Словарь для хранения транзакций по их хешам, чтобы избежать повторных вызовов
+        tx_cache = {}
+        total_added = 0
 
-def getBurnedPercentage(contract_address):
-    contract = getContract(contract_address)
-    
-    # Получение общего количества токенов
-    total_supply, decimals = getTotalSupply2(contract_address, contract)
-    
-    # Получение количества сожженных токенов
-    burned_tokens_readable = getBurnedBalance(contract_address, contract)
-    
-    # Преобразование total supply и burned tokens в читаемый формат с учетом десятичных знаков
-    total_supply_readable = total_supply / (10 ** decimals)
-    
-    # Вычисление процента сожженных токенов
-    burned_percentage = (burned_tokens_readable / total_supply_readable) * 100 if total_supply > 0 else 0
-    
-    return burned_percentage
+        for event in transfer_events:
+            tx_hash = event['transactionHash']
+            if tx_hash not in tx_cache:
+                tx_cache[tx_hash] = web3.eth.get_transaction(tx_hash)
+
+            tx_input = tx_cache[tx_hash]['input'].hex()
+            if tx_input.startswith('0xc9567bf9') or tx_input.startswith('0xf305d719'):
+                total_added += event['args']['value']
+
+        # Сохраняем и возвращаем результат
+        self.addedLiq = total_added / (10 ** self.tokenDecimals)
+        return self.addedLiq
+
+    def getAddedLiqPercentage(self):
+        return (self.addedLiq / self.token_supply) * 100 if self.token_supply > 0 else 0
+
+    def getAllInfo(self):
+        ts = self.token_supply
+        bb = self.getBurnedBalance()
+        bp = self.getBurnedPercentage()
+        al = self.getAddedLiquidity()
+        ap = self.getAddedLiqPercentage()
+        return dict(
+            total_supply=ts,
+            pair_balance=al,
+            pair_percent=ap,
+            burned_balance=bb,
+            burned_percent=bp,
+        )
+
 
 if __name__ == "__main__":
-    token_address = "0x66536F22fdf0D16299B2684a48C20431286de48f"
-    burned_percentage = getBurnedPercentage(token_address)
-    print(f"Burned Percentage: {burned_percentage}%")
+    print("Connected to node")
+    token_address = "0x19848077f45356b21164c412Eff3D3E4ff6Ebc31"
+    pair_address = "0xB01cC2918234ec8e3Fd649Df395837DDC9B88353"
+    analyzer = TokenWeb3Stats()
+    analyzer.initToken(token_address, pair_address)
+    info = analyzer.getAllInfo()
+    print(json.dumps(info, indent=4))
